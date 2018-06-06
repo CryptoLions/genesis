@@ -191,6 +191,10 @@ Because of this [unresolved issue](https://github.com/ethereum/web3.js/issues/16
 ### What happens if EOS key does not validate?
 Registration Fallback will attempt to find a public key for the address, and fallback register it. 
 
+### Do I need to agree on block numbers with others for block ranges?
+
+NO! That sounds like a recipe for indeterminism. The script will choose the deterministic end block for final snapshot, it's picks that block by detecting when the tokens were frozen. For ongoing snapshots the block ranges are determined by period, from the first block where the crowdsale had a transaction, to the last block of the defined period. 
+
 ## Troubleshooting
 
 ### Tests are failing
@@ -256,11 +260,14 @@ There are some differences between "ongoing" and "final" snapshots that need to 
 
 - *Ongoing* snapshots will produce accurate output based on period by constraining all blockchain activity to that range. 
    - Block range for each period must be found (determinism) 
+   	- Block range is defined by period, first block of crowdsale to the last block of the defined period. 
 	- Balances are calculated cumulatively, as opposed to `balanceOf()` method provided by  EOSCrowdsale contract
 	- EOS Key Registration is concluded by last registration within the block range. 
--*Final* simplifies a few things. However, it would be recommended that a cutoff block be enforced to encourage network consensus (primarily for registration transactions)
+- *Final* simplifies a few things. 
+	- Block range is defined by the first block of crowdsale (when first transaction occured) to the freeze block
 	- Balances are not calculated but inferred from state returned by `balanceOf()` function provided by Token Contract.
 	- EOS Key Registration is concluded by last registration within the block range. (keys public constant provided by EOSCrowdsale contract is not used) 
+	
 
 ## How It Works
 #### High Level
@@ -304,6 +311,9 @@ Below is the script transposed to plain english.
 	3. Claims
 	4. Registrations
 	5. Reclaimable Transfers
+	6. Resuming: 
+		6. If resume is set, it will only sync data from where it left off
+		7. Otherwise, contract tables will be truncated and it will re-sync everything from scratch. 
 2. Compile list of every address that has ever had an EOS balance, for each address:
 	1. Aggregate relevant txs
 		1. Claims and Buys, required for Unclaimed Balance Calculation
@@ -323,6 +333,9 @@ Below is the script transposed to plain english.
 		4. If all validated, set `valid` to true.
 	5. Process
 		6. Save every wallet regardless of validation or balance to `wallets` table
+        6. Resuming:
+	        7. resume is set and recalculate_wallets is not set, it will only process the above data for addresses with changes since the last sync and adjust block range for wallets accordingly (in the case of buys, it will aggregate based on period not on block range, because future buys are possible)
+		8. resume is not set or recalculate_wallets is set, it will truncate wallets table and process all addresses. 
 1. Registration Fallback
 	1. Query invalid addresses, above minimum snapshot threshold and without register error "exclude" (EOSToken/Crowdsale contracts)
 	2. Attempt to locate public key for each addrses
